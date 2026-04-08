@@ -1,8 +1,5 @@
 # PowerShell Email Expiration Notification
 
-<div style="text-align: center;"><b>Table of Contents</b></div>
-[Requirements](#Requirements) | [Installation/Configuration](#Installation/Configuration) | [Contributing](#Contributing) | [Future Feature Wishlist](#Future Feature Wishlist)
-
 ## Overview
 
 ### Requirements
