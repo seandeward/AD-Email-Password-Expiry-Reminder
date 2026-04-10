@@ -1,13 +1,13 @@
 
-#:: VERSION 1.0
+#:: VERSION 1.0.1
 
 #:: PROGRAM SETTINGS / GLOBAL VARIABLES
   #:: MODULE SETTINGS
-    $checkForADUpdates = $true # do you want the script to check for updates to the ActiveDirectory module?
+    $checkForADUpdates = $false # do you want the script to check for updates to the ActiveDirectory module?
 
   #:: EMAIL SETTINGS
     $email_FromAddress = 'FromAddress@company.com' # who is this email going to be sent from?
-    $email_ToAddress = "$UserEmailAddress" # email is sent to the user's email address
+    #* $email_ToAddress is set right before the Send-MailMessage command near the end of the script.
       # You can replace this with your own email for debugging, but just remember to put `$UserEmailAddress` back when you're done.
     $email_SmtpServer = '0.0.0.0' # IP Address of our SMTP Relay server.
     $email_PortNumber = '25' # as information from these email is not sensitive by default, it will be sent over Port 25 by default. This means everything is sent in plain-text (no encryption), but does not require authentication.
@@ -216,6 +216,8 @@ foreach ($user in $AllActiveADUsers) {
       </html>
     "
 
+    $email_ToAddress = $UserEmailAddress # Sets the "To Address" to the current user's email address
+
     #:: SEND THE EMAIL
     try {
       Send-MailMessage -To $email_ToAddress -From $email_FromAddress -Subject $email_Subject -Body $email_Body -BodyAsHtml -Priority $email_Priority -SmtpServer $email_SmtpServer -Port $email_PortNumber -ErrorAction Stop
@@ -229,3 +231,4 @@ foreach ($user in $AllActiveADUsers) {
   #* script moves onto the next $user in $AllActiveADUsers
 }
 #* Script is complete
+exit
