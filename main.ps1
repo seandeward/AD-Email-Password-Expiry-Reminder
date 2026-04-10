@@ -1,19 +1,33 @@
 
-#:: VERSION 1.0.1
+#:: VERSION 1.1
 
 #:: PROGRAM SETTINGS / GLOBAL VARIABLES
   #:: MODULE SETTINGS
+    $DebugMode = $true # Do you want to display extra Write-Host messages that explain the script's process?
+      $AdminEmailForDebugging = "" # When $DebugMode is set to $true, what email address will receive all of the emails? (This is where you'd put your email while you're configuring the script for your organization!)
+    
     $checkForADUpdates = $false # do you want the script to check for updates to the ActiveDirectory module?
 
   #:: EMAIL SETTINGS
     $email_FromAddress = 'FromAddress@company.com' # who is this email going to be sent from?
-    #* $email_ToAddress is set right before the Send-MailMessage command near the end of the script.
-      # You can replace this with your own email for debugging, but just remember to put `$UserEmailAddress` back when you're done.
+    if ($DebugMode -eq $true) {
+      $email_ToAddress = $AdminEmailForDebugging
+      if ($email_ToAddress -eq "") {
+        while ($email_ToAddress -eq ""){
+          $email_ToAddress = Read-Host "Please enter your email address. (This will be used for debugging purposes. Instead of sending an email to a user for their password's approaching expiration date, this script will send this email all of the emails instead.) "
+        }
+      }
+    }
+    #* If $DebugMode is $false, the $email_ToAddress is declared right before sending the Send-MailMessage at the end of the script.
     $email_SmtpServer = '0.0.0.0' # IP Address of our SMTP Relay server.
     $email_PortNumber = '25' # as information from these email is not sensitive by default, it will be sent over Port 25 by default. This means everything is sent in plain-text (no encryption), but does not require authentication.
     $email_Subject = 'Your Password Expires Soon' # email subject.
     $email_Priority = "High" # Choose the priority that will show in the sent email. Options are "High", "Normal", or "Low".1203
     # $email_Body grabs the $cssStyle variable to make the information in the email more readable.
+
+if ($DebugMode -eq $true) {
+  Write-Host "[DEBUG] Loading Functions..." -ForegroundColor Magenta
+}
 
 #:: FUNCTIONS
 function FindDepartment([string]$path) {
@@ -40,6 +54,11 @@ function FindDepartment([string]$path) {
   }
 }
 
+if ($DebugMode -eq $true) {
+  Write-Host "    Done" -ForegroundColor Green
+  Write-Host "[DEBUG] Importing `Active Directory` Module... " -ForegroundColor Magenta
+}
+
 #:: SCRIPT START
 try {
   Import-Module ActiveDirectory
@@ -64,20 +83,37 @@ if ($checkForADUpdates -eq $true){
 
 # get today's date - convert to a yyyy-MM-dd string format
 $TodaysDate = (Get-Date).ToString("yyyy-MM-dd")
+if ($DebugMode -eq $true) {
+  Write-Host "[DEBUG] Today's Date = $TodaysDate" -ForegroundColor Magenta
+}
 
 # get all enabled AD users who have passwords that will expire
 $AllActiveADUsers = Get-ADUser -Filter {enabled -eq $true -and PasswordNeverExpires -eq $false} | Select-Object -ExpandProperty SamAccountName
-
-Write-Host "[+] Beginning to send emails..." -ForegroundColor Cyan
+if ($DebugMode -eq $true) {
+  Write-Host "[DEBUG] All Active AD Users:" -ForegroundColor Magenta
+  Write-Host "$AllActiveADUsers" -ForegroundColor Gray
+  Write-Host "" # for terminal readability
+  Write-Host "[DEBUG] Beginning to send emails..." -ForegroundColor Magenta
+}
 
 foreach ($user in $AllActiveADUsers) {
+  if ($DebugMode -eq $true) {
+    Write-Host "" # for terminal readability by separating each user's information visually
+  }
   # convert string into a yyyy-MM-dd format
   $ExpiryDateStr = Get-ADUser -Identity $user -Properties msDS-UserPasswordExpiryTimeComputed | Select-Object Name, @{Name="Password Expiry Date";Expression={[datetime]::FromFileTime($_."msDS-UserPasswordExpiryTimeComputed")}} | Select-Object -ExpandProperty "Password Expiry Date"
   $ExpiryDate = $ExpiryDateStr.ToString("yyyy-MM-dd")
+  if ($DebugMode -eq $true) {
+    Write-Host "$user" -NoNewline
+    Write-Host " | Expiration date: $ExpiryDate" -ForegroundColor Gray -NoNewline
+  }
 
   # get number of days from today's date and the user's password expiry date
   $ts = New-TimeSpan -Start $TodaysDate -End $ExpiryDate
   $daysRemaining = $ts.Days
+  if ($DebugMode -eq $true) {
+    Write-Host " | Days Remaining: $daysRemaining" -ForegroundColor Gray -NoNewline
+  }
 
   # if password expires in 1-7 or 14 days
   if ($daysRemaining -in 1..7 -or $daysRemaining -eq 14) {
@@ -86,6 +122,9 @@ foreach ($user in $AllActiveADUsers) {
       $singleOrPlural = "day"
     } else {
       $singleOrPlural = "days"
+    }
+    if ($DebugMode -eq $true) {
+      Write-Host " | Single/Plural: $singleOrPlural" -ForegroundColor Gray -NoNewline
     }
 
     # if days =< 3, make banner color red. Else, make yellow
@@ -96,6 +135,9 @@ foreach ($user in $AllActiveADUsers) {
     } else {
       $bannerColor = '#edaa1a'
     }
+    if ($DebugMode -eq $true) {
+      Write-Host " | BannerColor: $bannerColor" -ForegroundColor Gray -NoNewline
+    }
     
     # get user info
     $UserInfo = Get-ADUser -Identity $user -Properties GivenName, Name, CanonicalName, EmailAddress | Select-Object GivenName, Name, CanonicalName, EmailAddress
@@ -103,12 +145,19 @@ foreach ($user in $AllActiveADUsers) {
     $UserFullName = $UserInfo.name
     $ouPath = $UserInfo.CanonicalName
     $UserEmailAddress = $UserInfo.EmailAddress
+    if ($DebugMode -eq $true) {
+      Write-Host " | User Info: $UserFirstName, $userFullName, $UserEmailAddress" -ForegroundColor Gray # $ouPath is printed in the terminal when an email is sent to the user.
+    }
 
     # find which OU $user is in, and send a respective custom message
     try {
       $message = FindDepartment($ouPath)
       if ($message -eq $False) {
-        Write-Host "    Skipping $user since FindDepartment function returned False." -ForegroundColor Magenta
+        if ($DebugMode -eq $true) {
+          Write-Host "    | Skipping $user since FindDepartment function returned False." -ForegroundColor Yellow -NoNewline
+        } else {
+          Write-Host "    Skipping $user since FindDepartment function returned False." -ForegroundColor Yellow -NoNewline
+        }
         continue
       }
     }
@@ -216,6 +265,13 @@ foreach ($user in $AllActiveADUsers) {
       </html>
     "
 
+    if ($DebugMode -eq $true) {
+      Write-Host ""
+      Write-Host "[DEBUG] $UserEmailAddress would normally get passed to $email_ToAddress here. Skipping... " -ForegroundColor Magenta
+    } else {
+      $email_ToAddress = $UserEmailAddress # actually make the $email_ToAddress = $UserEmailAddress
+    }
+
     $email_ToAddress = $UserEmailAddress # Sets the "To Address" to the current user's email address
 
     #:: SEND THE EMAIL
@@ -231,4 +287,9 @@ foreach ($user in $AllActiveADUsers) {
   #* script moves onto the next $user in $AllActiveADUsers
 }
 #* Script is complete
+if ($DebugMode -eq $true) {
+  Write-Host "" # for terminal readability
+  Write-Host "" # for terminal readability
+  Read-Host "[DEBUG] Script is complete! Please press Enter to close this terminal." -ForegroundColor Magenta # add this so that the terminal doesn't automatically close when the script is complete
+}
 exit
